@@ -1,0 +1,66 @@
+real L=1;
+real meshsize=0.1;
+int gammaB=1, gammaV=2, gammaAir=3;
+//hypoderme
+real Hh=0.3;
+border bas (t=0, L){x=t; y=0; label =gammaB;}
+border droith (t=0, Hh){x=L; y=t; label =gammaV;}
+border ligne1 (t=L, 0){x=t; y=Hh; label =3;}
+border gaucheh (t=Hh, 0){x=0; y=t; label =gammaV;}
+
+//derme
+real Hd=0.2;
+//border bas=-ligne1 
+border droitd (t=0+Hh, Hd+Hh){x=L; y=t; label =gammaV;}
+border ligne2 (t=L, 0){x=t; y=Hd+Hh; label =6;}
+border gauched (t=Hd+Hh, 0+Hh){x=0; y=t; label =gammaV;}
+
+//epiderme
+real He=0.3;
+//border bas=-ligne2 
+border droite (t=0+Hh+Hd, He+Hh+Hd){x=L; y=t; label =gammaV;}
+border ligne3 (t=L, 0){x=t; y=He+Hh+Hd; label =9;}
+border gauchee (t=Hd+Hh+He, 0+Hh+Hd){x=0; y=t; label =gammaV;}
+
+//air
+real Ha=0.2;
+//border bas=-ligne3
+border droita (t=0+Hh+Hd+He, Hh+Hd+He+Ha){x=L; y=t; label =gammaV;}
+border haut (t=L, 0){x=t; y=Hd+Hh+He+Ha; label =gammaAir;}
+border gauchea (t=Hd+Hh+He+Ha, 0+Hh+Hd+He){x=0; y=t; label =gammaV;}
+
+int Nx= L/meshsize;
+int Nyh=Hh/meshsize, Nyd=Hd/meshsize, Nye=He/meshsize, Nya=Ha/meshsize;
+func bordh = bas(Nx)+droith(Nyh)+ligne1(Nx)+gaucheh(Nyh);
+func bordd = droitd(Nyd)+ligne2(Nx)+gauched(Nyd);
+func borde = droite(Nye)+ligne3(Nx)+gauchee(Nye);
+func borda = droita(Nya)+haut(Nx)+gauchea(Nya);
+plot (bordh+bordd+borde+borda);
+
+mesh Th = buildmesh(bordh+bordd+borde+borda);
+plot(Th,wait=1);
+
+cout << "Hypoderme has region number " << Th(0.1, 0.1).region << endl;
+cout << "Derme has region number " << Th(0.1, 0.1+Hh).region << endl;
+cout << "Epiderme has region number " << Th(0.1, 0.1+Hh+Hd).region << endl;
+cout << "Air has region number " << Th(0.1, 0.1+Hh+Hd+He).region << endl;
+int regHypoderme=Th(0.1, 0.1).region;
+int regDerme=Th(0.1, 0.1+Hh).region;
+int regEpiderme=Th(0.1, 0.1+Hh+Hd).region;
+int regAir=Th(0.1, 0.1+Hh+Hd+He).region;
+
+
+fespace Vh(Th, P1);
+Vh T,Tp;
+macro grad(u) [dx(u), dy(u)]//
+real C=1, rho=1, k=1, s=0, gb=36, Text=20, a=1;
+
+// func f=(region==regionC1)+(region==regionC2);
+
+solve EqChaleur(T,Tp)=int2d(Th)(k*grad(T)'*grad(Tp))
+-int1d(Th,gammaAir)(a*Tp*T)
++int1d(Th,gammaAir)(a*Tp*Text)
+-int2d(Th)(Tp*s)
++on(gammaB,T=gb);
+
+plot(T,value=1,fill=1);
