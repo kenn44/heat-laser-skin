@@ -4,21 +4,21 @@ int gammaB=1, gammaV=2, gammaAir=3;
 real Hh=0.4;
 border bas (t=0, L){x=t; y=0; label =gammaB;}
 border droith (t=0, Hh){x=L; y=t; label =gammaV;}
-border ligne1 (t=L, 0){x=t; y=Hh; label =3;}
+border ligne1 (t=L, 0){x=t; y=Hh; label =10;}
 border gaucheh (t=Hh, 0){x=0; y=t; label =gammaV;}
 
 //derme
 real Hd=0.24;
 //border bas=-ligne1 
 border droitd (t=0+Hh, Hd+Hh){x=L; y=t; label =gammaV;}
-border ligne2 (t=L, 0){x=t; y=Hd+Hh; label =6;}
+border ligne2 (t=L, 0){x=t; y=Hd+Hh; label =11;}
 border gauched (t=Hd+Hh, 0+Hh){x=0; y=t; label =gammaV;}
 
 //epiderme
 real He=0.005;
 //border bas=-ligne2 
 border droite (t=0+Hh+Hd, He+Hh+Hd){x=L; y=t; label =gammaV;}
-border ligne3 (t=L, 0){x=t; y=He+Hh+Hd; label =9;}
+border ligne3 (t=L, 0){x=t; y=He+Hh+Hd; label =12;}
 border gauchee (t=Hd+Hh+He, 0+Hh+Hd){x=0; y=t; label =gammaV;}
 
 //air
@@ -55,10 +55,35 @@ cout << "Epiderme has region number " << regEpiderme << endl;
 cout << "Air has region number " << regAir << endl;
 
 
-
 fespace Vh(Th, P1);
 Vh Tn0, Tn, Tn1, Tp; //T(n-1) T(n) T(n+1) T'
 macro grad(u) [dx(u), dy(u)]//
+
+//Peu etre generer un nouveau maillage avec trunc
+//puis un nouvel espace
+Vh phi, phip, s;
+real[int] muatab=[0.5, 2.2, 21];
+func mua = muatab[0]*(region==regHypoderme) 
+    +muatab[1]*(region==regDerme)
+    + muatab[2]*(region==regEpiderme);
+real[int] mustab=[100, 156, 530];
+func mus = mustab[0]*(region==regHypoderme)
+    + mustab[1]*(region==regDerme)
+    + mustab[2]*(region==regEpiderme);
+real g=0.79;
+//real[int] LL=[0, -1];
+
+func gamma = mua + (1 - g)*mus;
+func D = 1/(3*gamma);
+//resolution
+problem source(phi,phip) =
+    int2d(Th)(mua*phi*phip)
+    +int2d(Th)(D*grad(phi)'*grad(phip))
+    +int2d(Th)([0,-1]'*grad(phi)*phip)
+    +on(gammaAir,phi=1); //definir gammaApp ou une gaussienne
+func lambda=mua*phi;
+func real pulse(int t){return t%2;}
+s=lambda*pulse(3);
 
 //Temps
 real t=0;
@@ -67,16 +92,16 @@ real tfinal=60*60*10; // 10 heures
 int iter=0, niter=tfinal/dt;
 
 // Constantes physiques
-real s=1, gb=36, Text=20, a=10000;
+real gb=36, Text=20, a=10000;
 
 // Tableau et fonction permettant de définir les constantes dans chaque domaine
 real[int] rhotab = [ 1.2, 1.2, 1.2 ,1.2e-3 ];
 func rho = rhotab[0]*(region==regHypoderme) + rhotab[1]*(region==regDerme) + rhotab[2]*(region==regEpiderme) + rhotab[3]*(region==regAir);
 
-real[int] Ktab = [ 21 , 53 , 46 , 2.34 ];
+real[int] Ktab = [ 46, 53, 21, 2.34 ];
 func K = Ktab[0]*(region==regHypoderme) + Ktab[1]*(region==regDerme) + Ktab[2]*(region==regEpiderme) + Ktab[3]*(region==regAir);
 
-real[int] Ctab = [ 3.6, 3.8, 3.8, 1.004 ];
+real[int] Ctab = [ 3.8, 3.8, 3.6, 1.004 ];
 func C = Ctab[0]*(region==regHypoderme) + Ctab[1]*(region==regDerme) + Ctab[2]*(region==regEpiderme) + Ctab[3]*(region==regAir);
 
 /*
