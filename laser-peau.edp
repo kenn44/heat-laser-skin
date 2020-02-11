@@ -44,21 +44,30 @@ plot (bordh+bordd+borde+borda);
 mesh Th = buildmesh(bordh+bordd+borde+borda);
 plot(Th);
 
-cout << "Hypoderme has region number " << Th(0.1, 0.1).region << endl;
-cout << "Derme has region number " << Th(0.1, 0.1+Hh).region << endl;
-cout << "Epiderme has region number " << Th(0.1, 0.1+Hh+Hd).region << endl;
-cout << "Air has region number " << Th(0.1, 0.1+Hh+Hd+He).region << endl;
-int regHypoderme=Th(0.1, 0.1).region;
-int regDerme=Th(0.1, 0.1+Hh).region;
-int regEpiderme=Th(0.1, 0.1+Hh+Hd).region;
-int regAir=Th(0.1, 0.1+Hh+Hd+He).region;
+int regHypoderme=Th(0.1, Hh/2).region;
+int regDerme=Th(0.1, Hh+Hd/2).region;
+int regEpiderme=Th(0.1, Hh+Hd+He/2).region;
+int regAir=Th(0.1, Hh+Hd+He+Ha/2).region;
+
+cout << "Hypoderme has region number " << regHypoderme << endl;
+cout << "Derme has region number " << regDerme << endl;
+cout << "Epiderme has region number " << regEpiderme << endl;
+cout << "Air has region number " << regAir << endl;
+
 
 
 fespace Vh(Th, P1);
-Vh T,Tp;
+Vh Tn0, Tn, Tn1, Tp; //T(n-1) T(n) T(n+1) T'
 macro grad(u) [dx(u), dy(u)]//
+
+//Temps
+real t=0;
+real dt=100; //secondes
+real tfinal=60*60*10; // 10 heures
+int iter=0, niter=tfinal/dt;
+
 // Constantes physiques
-real s=40, gb=36, Text=20, a=10000;
+real s=1, gb=36, Text=20, a=10000;
 
 // Tableau et fonction permettant de définir les constantes dans chaque domaine
 real[int] rhotab = [ 1.2, 1.2, 1.2 ,1.2e-3 ];
@@ -70,15 +79,73 @@ func K = Ktab[0]*(region==regHypoderme) + Ktab[1]*(region==regDerme) + Ktab[2]*(
 real[int] Ctab = [ 3.6, 3.8, 3.8, 1.004 ];
 func C = Ctab[0]*(region==regHypoderme) + Ctab[1]*(region==regDerme) + Ctab[2]*(region==regEpiderme) + Ctab[3]*(region==regAir);
 
-solve EqChaleur(T,Tp)=int2d(Th)(K*grad(T)'*grad(Tp))
-+int1d(Th,gammaAir)(a*Tp*T)
--int1d(Th,gammaAir)(a*Text*Tp)
--int2d(Th)(s*Tp)
-+on(gammaB,T=gb);
+/*
+solve EqChaleur(T,Tp)=int2d(Th)(K*grad(T)'*grad(Tp)) -> vA
++int1d(Th,gammaAir)(a*Tp*T)                         -> vA
+-int1d(Th,gammaAir)(a*Text*Tp)                      -> vRHS0
+-int2d(Th)(s*Tp)                                    ->vRHS0
++on(gammaB,T=gb);                               -> vA et vRHS0
 
 plot(T,value=1,fill=1);
+*/
+//1ere iteration avec Euleur Explicite
+varf vA(Tn1, Tp)=
+    int2d(Th)(rho*C*Tn1*Tp/dt+K*grad(Tn1)'*grad(Tp))
+    +int1d(Th,gammaAir)(a*Tp*Tn1)
+    +on(gammaB,Tn1=gb);
 
-//Add time with BDF2 and implicit Newton
+varf vB(Tn,Tp)=
+    int2d(Th)(rho*C*Tn*Tp/dt);
+
+varf vRHS0(Tn1,Tp)=
+    int1d(Th,gammaAir)(a*Text*Tp)
+    +int2d(Th)(s*Tp)
+    +on(gammaB,Tn1=gb);
+
+matrix A=vA(Vh,Vh,solver=CG);
+matrix B=vB(Vh,Vh);
+real[int] RHS0=vRHS0(0,Vh);
+
+func T0 = Text; //Temperature initiale
+Tn1=T0;
+
+Tn=Tn1;
+real[int] RHS=RHS0;
+RHS+=B*Tn[]; //second membre
+Tn1[]=A^(-1)*RHS;
+t+=dt;
+
+
+//On continue avec BDF2 dT/dt=(3*Tn1-4*Tn+*Tn0)/2*dt
+varf vA2(Tn1,Tp)=
+    int2d(Th)((1.5)*rho*C*Tn1*Tp/dt+K*grad(Tn1)'*grad(Tp))
+    +int1d(Th,gammaAir)(a*Tp*Tn1)
+    +on(gammaB,Tn1=gb);
+
+varf vB2(Tn,Tp)=
+    int2d(Th)(2*rho*C*Tn*Tp/dt);
+
+varf vC2(Tn0,Tp)=
+	-int2d(Th)((0.5)*rho*C*Tn0*Tp/dt);
+
+// vRHS0 ne change pas
+A=vA2(Vh,Vh,solver=CG);
+B=vB2(Vh,Vh);
+matrix E=vC2(Vh,Vh);
+
+for(iter=1;iter<niter;++iter){
+	Tn0=Tn;
+	Tn=Tn1;
+	RHS=RHS0;
+	RHS+=B*Tn[];
+	RHS+=E*Tn0[]; //second membre
+	Tn1[]=A^(-1)*RHS;
+	t+=dt;
+	plot(Tn1,value=1,fill=1,wait=0,cmm=" t "+ t);
+}
+plot(Tn1,value=1,fill=1,dim=3);
+
+//Compare with only implicit Newton
 //Solve coupled equation
 //Make Quadranglangle mesh
 //Add terme with u
